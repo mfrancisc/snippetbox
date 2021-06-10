@@ -1,0 +1,11 @@
+###
+# home
+GET localhost:4000/
+
+###
+# display specific snippet
+GET localhost:4000/snippet?id=10
+
+###
+# create a snippet
+POST localhost:4000/snippet/create
