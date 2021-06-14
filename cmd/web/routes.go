@@ -5,6 +5,7 @@ import (
 
 	"github.com/bmizerany/pat"
 	"github.com/justinas/alice"
+	"github.com/mfrancisc/snippetbox/ui"
 )
 
 // Update the signature for the routes() method so that it returns a
@@ -14,7 +15,7 @@ func (app *application) routes() http.Handler {
 	// Create a new middleware chain containing the middleware specific to
 	// our dynamic application routes. For now, this chain will only contain
 	// the session middleware but we'll add more to it later.
-	dynamicMiddleware := alice.New(app.session.Enable)
+	dynamicMiddleware := alice.New(app.session.Enable, noSurf, app.authenticate)
 
 	mux := pat.New()
 	// Update these routes to use the new dynamic middleware chain followed
@@ -31,8 +32,20 @@ func (app *application) routes() http.Handler {
 	mux.Post("/user/login", dynamicMiddleware.ThenFunc(app.loginUser))
 	mux.Post("/user/logout", dynamicMiddleware.Append(app.requireAuthentication).ThenFunc(app.logoutUser))
 
-	fileServer := http.FileServer(http.Dir("./ui/static/"))
-	mux.Get("/static/", http.StripPrefix("/static", fileServer))
+	mux.Get("/ping", http.HandlerFunc(ping))
+
+	// Take the ui.Files embedded filesystem and convert it to a http.FS type so that
+	// it satisfies the http.FileSystem interface. We then pass that to the
+	// http.FileServer() function to create the file server handler.
+	fileServer := http.FileServer(http.FS(ui.Files))
+
+	// Our static files are contained in the "static" folder of the ui.Files embedded
+	// filesystem. So, for example, our CSS stylesheet is located at
+	// "static/css/main.css". This means that we now longer need to strip the prefix
+	// from the request URL -- any requests that start with /static/ can just be passed
+	// directly to the file server and the corresponding static file will be served
+	// (so long as it exists).
+	mux.Get("/static/", fileServer)
 
 	return standardMiddleware.Then(mux)
 }

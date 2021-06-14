@@ -10,22 +10,35 @@ import (
 	"os"
 	"time"
 
+	"github.com/mfrancisc/snippetbox/pkg/models"
 	"github.com/mfrancisc/snippetbox/pkg/models/mysql"
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/golangcollege/sessions"
 )
 
+type contextKey string
+
+const contextKeyIsAuthenticated = contextKey("isAuthenticated")
+
 // Define an application struct to hold the application-wide dependencies for the
 // web application. For now we'll only include fields for the two custom loggers, but
 // we'll add more to it as the build progresses.
 type application struct {
-	errorLog      *log.Logger
-	infoLog       *log.Logger
-	session       *sessions.Session
-	snippets      *mysql.SnippetModel
+	errorLog *log.Logger
+	infoLog  *log.Logger
+	session  *sessions.Session
+	snippets interface {
+		Insert(string, string, string) (int, error)
+		Get(int) (*models.Snippet, error)
+		Latest() ([]*models.Snippet, error)
+	}
 	templateCache map[string]*template.Template
-	users         *mysql.UserModel
+	users         interface {
+		Insert(string, string, string) error
+		Authenticate(string, string) (int, error)
+		Get(int) (*models.User, error)
+	}
 }
 
 func main() {
@@ -56,7 +69,7 @@ func main() {
 	defer db.Close()
 
 	// Initialize a new template cache...
-	templateCache, err := newTemplateCache("./ui/html/")
+	templateCache, err := newTemplateCache()
 	if err != nil {
 		errorLog.Fatal(err)
 	}
@@ -67,6 +80,7 @@ func main() {
 	session := sessions.New([]byte(*secret))
 	session.Lifetime = 12 * time.Hour
 	session.Secure = true
+	session.SameSite = http.SameSiteStrictMode
 
 	// Initialize a new instance of application containing the dependencies.
 	app := &application{
